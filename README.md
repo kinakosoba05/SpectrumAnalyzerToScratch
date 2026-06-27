@@ -1,2 +1,3 @@
 # OscilloscopeToScratch
-# https://scratch.mit.edu/projects/1335516813/で使う道具です。
+
+[Scratchの作品はこちら](https://scratch.mit.edu/projects/133516813/)で使う道具です。
