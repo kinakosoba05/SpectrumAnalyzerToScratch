@@ -19,7 +19,7 @@
 <body>
 
 <div class="box">
-    <h2>🎛️ Scratch用 フーリエ変換プロツール (V4.3.5 周波数のみ逆順版)</h2>
+    <h2>🎛️ Scratch用 フーリエ変換プロツール (V4.3.6 完全正順・左低音版)</h2>
     <p>パラメータを設定してから、音楽ファイルを選択してください。</p>
     
     <div class="setting-group">
@@ -49,7 +49,7 @@
     <div id="status" style="color: #ff6600;">「ファイルを選択」から音楽ファイルを選んでください</div>
     
     <div class="info">
-        ★周波数のみ逆順アップデート版：ファイルの行（タイムライン）は最初から最後まで正順のまま、<strong>1行の中身のデータ（周波数）だけを完全に逆順（高音から低音の順）</strong>に出力するように変更しました。
+        ★完全正順アップデート版：タイムライン（行の順番）も最初から最後まで通常通り、1行の中身（周波数）も<strong>左から右に向かって「低音から高音」</strong>の順番で出力します。通常のスペアナ描画で、左端を低音にしたい場合にベストな設定です。
     </div>
 </div>
 
@@ -200,11 +200,11 @@ window.onload = function() {
             const finalChCount = activeBandIndices.length; 
             const cutCount = bandCount - finalChCount;      
 
-            // テキスト出力（★行のタイムラインは0から正順、1行の中身（周波数）だけを逆順にする）
+            // テキスト出力（★行も中身も完全に正順に戻す：左低音・右高音）
             let output = [];
-            for (let f = 0; f < preCalculatedMatrix.length; f++) { // 行は最初から通常通りループ
+            for (let f = 0; f < preCalculatedMatrix.length; f++) { // 時間軸：最初から最後へ通常通り
                 let lineData = [];
-                for (let i = activeBandIndices.length - 1; i >= 0; i--) { // 周波数は後ろからループ（逆順）
+                for (let i = 0; i < activeBandIndices.length; i++) { // 周波数：低音から高音へ通常通り
                     let realBandIdx = activeBandIndices[i];
                     lineData.push(preCalculatedMatrix[f][realBandIdx]);
                 }
@@ -221,7 +221,7 @@ window.onload = function() {
                             now.getMinutes().toString().padStart(2, '0') + 
                             now.getSeconds().toString().padStart(2, '0');
             
-            const uniqueFileName = `${baseFileName}_(${bandCount}-${cutCount}ch=)${finalChCount}ch_FreqReverse_${year}${month}${date}_${timeStr}.txt`;
+            const uniqueFileName = `${baseFileName}_(${bandCount}-${cutCount}ch=)${finalChCount}ch_Standard_${year}${month}${date}_${timeStr}.txt`;
 
             const blob = new Blob([finalResultText], { type: 'text/plain' });
             const link = document.createElement('a');
@@ -232,7 +232,7 @@ window.onload = function() {
             document.body.removeChild(link);
             
             statusDiv.style.color = "#27ae60";
-            statusDiv.innerText = `✅ 解析完了！周波数データ（1行の中身）だけを逆順にして [ ${finalChCount} 分割 ] で保存しました！`;
+            statusDiv.innerText = `✅ 解析完了！【左端が低音】になるように正順のデータ配列 [ ${finalChCount} 分割 ] で保存しました！`;
         } catch (err) {
             console.error(err);
             statusDiv.style.color = "#c0392b";
