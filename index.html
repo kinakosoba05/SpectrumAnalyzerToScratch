@@ -19,7 +19,7 @@
 <body>
 
 <div class="box">
-    <h2>🎛️ Scratch用 フーリエ変換プロツール (V2 FFT完全同期版)</h2>
+    <h2>🎛️ Scratch用 フーリエ変換プロツール (V4.3.5 周波数のみ逆順版)</h2>
     <p>パラメータを設定してから、音楽ファイルを選択してください。</p>
     
     <div class="setting-group">
@@ -49,7 +49,7 @@
     <div id="status" style="color: #ff6600;">「ファイルを選択」から音楽ファイルを選んでください</div>
     
     <div class="info">
-        ★完全同期アップデート版：秒数指定からFPS指定に変更しました。トリガー同期ロジックはあえて入れず、時間軸を完全に固定しています。Scratch側で <strong>「[floor] of (タイマー * 設定したFPS) + 1」</strong> とするだけで、音とスペアナの動きが絶対にズレなくなります！
+        ★周波数のみ逆順アップデート版：ファイルの行（タイムライン）は最初から最後まで正順のまま、<strong>1行の中身のデータ（周波数）だけを完全に逆順（高音から低音の順）</strong>に出力するように変更しました。
     </div>
 </div>
 
@@ -103,7 +103,6 @@ window.onload = function() {
 
         try {
             const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            // デコード用バッファのコピーを渡す（Firefox対策）
             const audioBuffer = await audioCtx.decodeAudioData(loadedArrayBuffer.slice(0)); 
             
             statusDiv.innerText = "⏳ 2/2: 大量フーリエ変換を計算中...";
@@ -114,31 +113,21 @@ window.onload = function() {
             const bandCount = parseInt(paramBands.value) || 256;
 
             const sampleRate = audioBuffer.sampleRate;
-            
-            // FPS基準で正確に1フレームあたりの進むサンプル数を計算
             const fpsSamples = sampleRate / targetFPS;
             const totalFrames = Math.floor(audioBuffer.length / fpsSamples);
             
             const channelData = audioBuffer.getChannelData(0);
-            // FFT Sizeは2の累乗である必要がある (スペアナ描画には1024が手頃)
             const fftSize = 1024; 
 
             let rawFrames = [];
             let maxRawValue = 0.001;
 
-            // FFT計算（トリガー同期は行わず、等間隔でスライスする）
             for (let f = 0; f < totalFrames; f++) {
-                // 【超重要】丸め誤差を排除した正確な時間軸サンプル位置
                 const startSample = Math.floor(f * fpsSamples);
                 if (startSample + fftSize > channelData.length) break;
                 
                 let bands = new Array(bandCount).fill(0);
                 let counts = new Array(bandCount).fill(0);
-                
-                // --- FFT本体（簡易実装。速度優先のため、本来のFFTではなく窓関数なし矩形窓でのDFTに近似した処理） ---
-                // 注意：このJSコード内のFFT処理は厳密なフーリエ変換ではなく、1024サンプルの生データを1024個の周波数成分として
-                // そのままスペクトラムとして扱っている（実質的に実数DFTのパワースペクトル計算に等しい）。
-                // 解析用途ではなくビジュアライザー用途なので、十分機能する。
                 
                 for (let i = 0; i < fftSize / 2; i++) {
                     const currentHz = (i * sampleRate) / fftSize;
@@ -150,7 +139,6 @@ window.onload = function() {
                     const logMax = Math.log2(maxHz);
                     const logCurrent = Math.log2(currentHz);
                     
-                    // 対数軸（対数スケール）にマッピング
                     let bandIdx = Math.floor(((logCurrent - logMin) / (logMax - logMin)) * bandCount);
                     if (bandIdx < 0) bandIdx = 0;
                     if (bandIdx > bandCount - 1) bandIdx = bandCount - 1;
@@ -159,7 +147,6 @@ window.onload = function() {
                     counts[bandIdx]++;
                 }
                 
-                // バンドごとの平均を計算
                 let frameAvgs = [];
                 for(let b = 0; b < bandCount; b++) {
                     let avg = counts[b] > 0 ? (bands[b] / counts[b]) : 0;
@@ -169,7 +156,6 @@ window.onload = function() {
                 rawFrames.push(frameAvgs);
             }
 
-            // データの正規化と補正（Scratchで使いやすい0〜155の整数にする）
             let preCalculatedMatrix = [];
             const targetMax = 145; 
 
@@ -177,19 +163,16 @@ window.onload = function() {
                 let frameNums = [];
                 for (let b = 0; b < bandCount; b++) {
                     let rawVal = rawFrames[f][b];
-                    let norm = rawVal / maxRawValue; // 全体の最大値で正規化
+                    let norm = rawVal / maxRawValue; 
                     if (norm > 1) norm = 1;
 
-                    // 対数ブースト（弱い音を強調する）
                     let boosted = Math.log1p(norm * 1.718) / Math.log1p(1.718); 
                     let num = Math.round(boosted * targetMax);
                     
-                    // 高音域の補正（少し強調）
                     if (b > bandCount / 2) {
                         num = Math.round(num * (1 + (b - bandCount / 2) * (0.1 / bandCount)));
                     }
                     
-                    // Scratchのリミット（ペン透過度の最大など）に合わせる
                     num = Math.min(155, num); 
                     if (num < 0) num = 0;
                     
@@ -198,7 +181,6 @@ window.onload = function() {
                 preCalculatedMatrix.push(frameNums);
             }
 
-            // 不要な列（常に無音の周波数帯域）をカットする
             let activeBandIndices = []; 
             for (let b = 0; b < bandCount; b++) {
                 let isAlwaysZero = true;
@@ -218,11 +200,11 @@ window.onload = function() {
             const finalChCount = activeBandIndices.length; 
             const cutCount = bandCount - finalChCount;      
 
-            // テキスト出力（スラッシュ区切り）
+            // テキスト出力（★行のタイムラインは0から正順、1行の中身（周波数）だけを逆順にする）
             let output = [];
-            for (let f = 0; f < preCalculatedMatrix.length; f++) {
+            for (let f = 0; f < preCalculatedMatrix.length; f++) { // 行は最初から通常通りループ
                 let lineData = [];
-                for (let i = 0; i < activeBandIndices.length; i++) {
+                for (let i = activeBandIndices.length - 1; i >= 0; i--) { // 周波数は後ろからループ（逆順）
                     let realBandIdx = activeBandIndices[i];
                     lineData.push(preCalculatedMatrix[f][realBandIdx]);
                 }
@@ -231,7 +213,6 @@ window.onload = function() {
 
             const finalResultText = output.join('\n');
 
-            // ファイル名生成（タイムスタンプ付き）
             const now = new Date();
             const year = now.getFullYear();
             const month = (now.getMonth() + 1).toString().padStart(2, '0');
@@ -240,9 +221,8 @@ window.onload = function() {
                             now.getMinutes().toString().padStart(2, '0') + 
                             now.getSeconds().toString().padStart(2, '0');
             
-            const uniqueFileName = `${baseFileName}_(${bandCount}-${cutCount}ch=)${finalChCount}ch_${year}${month}${date}_${timeStr}.txt`;
+            const uniqueFileName = `${baseFileName}_(${bandCount}-${cutCount}ch=)${finalChCount}ch_FreqReverse_${year}${month}${date}_${timeStr}.txt`;
 
-            // ダウンロード
             const blob = new Blob([finalResultText], { type: 'text/plain' });
             const link = document.createElement('a');
             link.href = URL.createObjectURL(blob);
@@ -252,7 +232,7 @@ window.onload = function() {
             document.body.removeChild(link);
             
             statusDiv.style.color = "#27ae60";
-            statusDiv.innerText = `✅ 解析完了！Scratch側でタイマーに同期できるようにFPSベースで最適化しました。不要列を ${cutCount} 個カットし、[ ${finalChCount} 分割 ] で保存しました！`;
+            statusDiv.innerText = `✅ 解析完了！周波数データ（1行の中身）だけを逆順にして [ ${finalChCount} 分割 ] で保存しました！`;
         } catch (err) {
             console.error(err);
             statusDiv.style.color = "#c0392b";
