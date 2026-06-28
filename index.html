@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>OscilloscopeToScratch</title>
+    <title>OscilloscopeToScratch (FFTタイマー完全同期版)</title>
     <style>
         body { font-family: sans-serif; padding: 20px; background: #eef2f7; color: #333; }
         .box { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); max-width: 650px; margin: 0 auto; text-align: center; }
@@ -19,14 +19,14 @@
 <body>
 
 <div class="box">
-    <h2>🎛️ Scratch用 フーリエ変換プロツール (V2 軽量ダウンロード版)</h2>
+    <h2>🎛️ Scratch用 フーリエ変換プロツール (V2 タイマー完全同期版)</h2>
     <p>パラメータを設定してから、音楽ファイルを選択してください。</p>
     
     <div class="setting-group">
         <strong>⚙️ 解析パラメータ設定</strong>
         <div class="setting-item">
-            <label>一コマの秒数 (秒):</label>
-            <input type="number" id="paramFrameTime" value="0.03" step="0.001" min="0.001">
+            <label>出力フレームレート (FPS):</label>
+            <input type="number" id="paramFPS" value="30" step="1" min="1" max="250">
         </div>
         <div class="setting-item">
             <label>開始周波数 (Hz):</label>
@@ -49,7 +49,7 @@
     <div id="status" style="color: #ff6600;">「ファイルを選択」から音楽ファイルを選んでください</div>
     
     <div class="info">
-        ★オシロスコープ最適化版：プレビューエリアを削除し、動作を軽量化しました。あの最高なオシロスコープの波形が出力されます。
+        ★完全同期アップデート版：秒数指定からFPS指定に変更しました。Scratch側で <strong>「[floor] of (タイマー * 設定したFPS) + 1」</strong> とするだけで、音とスペアナの動きが絶対にズレなくなります！
     </div>
 </div>
 
@@ -59,7 +59,7 @@ window.onload = function() {
     const startBtn = document.getElementById('startBtn');
     const statusDiv = document.getElementById('status');
     
-    const paramFrameTime = document.getElementById('paramFrameTime');
+    const paramFPS = document.getElementById('paramFPS');
     const paramMinHz = document.getElementById('paramMinHz');
     const paramMaxHz = document.getElementById('paramMaxHz');
     const paramBands = document.getElementById('paramBands');
@@ -107,13 +107,17 @@ window.onload = function() {
             
             statusDiv.innerText = "⏳ 2/2: 大量フーリエ変換を計算中...";
 
-            const frameTime = parseFloat(paramFrameTime.value) || 0.03;
+            const targetFPS = parseInt(paramFPS.value) || 30;
             const minHz = parseFloat(paramMinHz.value) || 10;
             const maxHz = parseFloat(paramMaxHz.value) || 6000;
             const bandCount = parseInt(paramBands.value) || 256;
 
             const sampleRate = audioBuffer.sampleRate;
-            const totalFrames = Math.floor(audioBuffer.duration / frameTime);
+            
+            // FPS基準で正確に1フレームあたりの進むサンプル数を計算
+            const fpsSamples = sampleRate / targetFPS;
+            const totalFrames = Math.floor(audioBuffer.length / fpsSamples);
+            
             const channelData = audioBuffer.getChannelData(0);
             const fftSize = 1024; 
 
@@ -121,7 +125,8 @@ window.onload = function() {
             let maxRawValue = 0.001;
 
             for (let f = 0; f < totalFrames; f++) {
-                const startSample = Math.floor(f * frameTime * sampleRate);
+                // 【超重要】丸め誤差を排除した正確な時間軸サンプル位置
+                const startSample = Math.floor(f * fpsSamples);
                 if (startSample + fftSize > channelData.length) break;
                 
                 let bands = new Array(bandCount).fill(0);
@@ -218,7 +223,7 @@ window.onload = function() {
                             now.getMinutes().toString().padStart(2, '0') + 
                             now.getSeconds().toString().padStart(2, '0');
             
-            const uniqueFileName = `${baseFileName}_(${bandCount}-${cutCount}ch=) ${finalChCount}ch_${year}${month}${date}_${timeStr}.txt`;
+            const uniqueFileName = `${baseFileName}_${targetFPS}fps_(${bandCount}-${cutCount}ch=)${finalChCount}ch_${year}${month}${date}_${timeStr}.txt`;
 
             const blob = new Blob([finalResultText], { type: 'text/plain' });
             const link = document.createElement('a');
@@ -229,7 +234,7 @@ window.onload = function() {
             document.body.removeChild(link);
             
             statusDiv.style.color = "#27ae60";
-            statusDiv.innerText = `✅ 天井修正完了！不要列を ${cutCount} 個カットし、[ ${finalChCount} 分割 ] で保存しました！`;
+            statusDiv.innerText = `✅ 解析完了！${targetFPS}FPS用に同期最適化しました。不要列を ${cutCount} 個カットし、[ ${finalChCount} 分割 ] で保存しました！`;
         } catch (err) {
             console.error(err);
             statusDiv.style.color = "#c0392b";
